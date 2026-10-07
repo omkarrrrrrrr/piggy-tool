@@ -512,6 +512,29 @@
     state = normalize({ txns: [], rev: state.rev }); save(); render(); toast('All data erased');
   };
 
+  /* ---------- install as an app (PWA) ---------- */
+  let installEvt = null;
+  const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const hiddenInstall = () => { try { return localStorage.getItem('piggy.installHidden') === '1'; } catch (e) { return false; } };
+  function showInstallBar() { $('installBar').hidden = standalone() || hiddenInstall(); }
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; showInstallBar(); });
+  window.addEventListener('appinstalled', () => { installEvt = null; $('installBar').hidden = true; toast('Piggy installed'); });
+  $('btnInstall').onclick = async () => {
+    if (installEvt) { installEvt.prompt(); await installEvt.userChoice.catch(() => {}); installEvt = null; $('installBar').hidden = true; return; }
+    $('installHow').innerHTML = isIOS
+      ? 'Tap the <b>Share</b> button in Safari, then choose <b>Add to Home Screen</b>.'
+      : 'Open your browser menu (⋮) and choose <b>Install app</b> or <b>Add to Home screen</b>.';
+    $('dlgInstall').showModal();
+  };
+  $('btnInstallClose').onclick = () => $('dlgInstall').close();
+  $('btnInstallHide').onclick = () => { $('installBar').hidden = true; try { localStorage.setItem('piggy.installHidden', '1'); } catch (e) { /* ignore */ } };
+  // iPhones never fire beforeinstallprompt, so offer the manual steps there; other browsers show the bar once they say they can install
+  if (isIOS) showInstallBar();
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {}));
+  }
+
   render();
   restoreDraft();
   syncFromIdb();

@@ -189,3 +189,12 @@ label.file { display: inline-block; cursor: pointer; }
 .pv-bar { position: sticky; bottom: calc(10px + env(safe-area-inset-bottom)); display: flex; gap: 10px; justify-content: flex-end; margin-top: 12px; padding: 10px; background: color-mix(in srgb, var(--card) 92%, transparent); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 8px 24px rgba(15, 23, 42, .15); z-index: 5; }
 .pv-bar .btn.primary { flex: 1; }
 @media (max-width: 560px) { .pv-bar .btn { min-height: 46px; } .list-head .btn.sm { min-height: 40px; } dialog .row .btn { flex: 1 1 auto; } }
+
+.install { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 10px 10px 12px; margin: 0 0 12px; box-shadow: var(--shadow); }
+.install[hidden] { display: none; }
+.install > div { flex: 1; min-width: 0; line-height: 1.3; }
+.install b { display: block; font-size: 14.5px; }
+.install small { color: var(--muted); font-size: 12.5px; display: block; }
+.install .x { border: 0; background: none; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 6px 8px; border-radius: 8px; }
+.logo.sm { width: 34px; height: 34px; border-radius: 10px; font-size: 18px; }
+@media (max-width: 420px) { .install small { display: none; } }
