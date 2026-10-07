@@ -9,18 +9,79 @@
   let drafts = [];
   const view = { period: null, account: 'all', type: 'all', q: '', editing: null };
 
+  /* ---------- storage: localStorage + an IndexedDB mirror on this device ---------- */
+  const DRAFT_KEY = 'piggy.draft.v1';
+  function normalize(s) {
+    s = s && Array.isArray(s.txns) ? s : { txns: [] };
+    s.accounts = Array.isArray(s.accounts) ? s.accounts : [];
+    s.seq = s.seq || s.txns.length; s.rev = s.rev || 0;
+    return s;
+  }
   function load() {
-    try {
-      const s = JSON.parse(localStorage.getItem(KEY));
-      if (s && Array.isArray(s.txns)) return s;
-    } catch (e) { /* private mode or corrupt data: start fresh */ }
-    return { txns: [], seq: 0 };
+    try { return normalize(JSON.parse(localStorage.getItem(KEY))); }
+    catch (e) { return normalize(null); } // private mode or corrupt data: start fresh
   }
+  const idb = {
+    open() {
+      return new Promise((res, rej) => {
+        if (!window.indexedDB) return rej(new Error('no idb'));
+        const r = indexedDB.open('piggy', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('kv');
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+      });
+    },
+    async get(k) {
+      const db = await this.open();
+      return new Promise((res, rej) => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+    },
+    async set(k, v) {
+      const db = await this.open();
+      return new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); });
+    },
+  };
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); }
+    state.rev = (state.rev || 0) + 1;
+    const json = JSON.stringify(state);
+    try { localStorage.setItem(KEY, json); }
     catch (e) { toast('Could not save – is browser storage blocked?'); }
+    idb.set('state', json).catch(() => {});
+    askPersist();
   }
-
+  let persistAsked = false;
+  function askPersist() {
+    if (persistAsked || !navigator.storage || !navigator.storage.persist) return;
+    persistAsked = true;
+    navigator.storage.persist().then(showStoreNote).catch(() => {});
+  }
+  function showStoreNote() {
+    const el = $('storeNote'); if (!el) return;
+    const p = navigator.storage && navigator.storage.persisted ? navigator.storage.persisted() : Promise.resolve(false);
+    p.then((ok) => { el.textContent = ok ? 'Saved on this device and protected from automatic clean-up.' : 'Saved on this device. Download a backup now and then to be safe.'; }).catch(() => {});
+  }
+  function persistDraft() {
+    try {
+      const blob = $('blob').value;
+      if (!blob && !drafts.length) localStorage.removeItem(DRAFT_KEY);
+      else localStorage.setItem(DRAFT_KEY, JSON.stringify({ blob, drafts }));
+    } catch (e) { /* drafts are a convenience only */ }
+  }
+  function restoreDraft() {
+    try {
+      const d = JSON.parse(localStorage.getItem(DRAFT_KEY));
+      if (!d) return;
+      $('blob').value = d.blob || ''; drafts = Array.isArray(d.drafts) ? d.drafts : [];
+      if (drafts.length) renderPreview();
+    } catch (e) { /* ignore */ }
+  }
+  // if the browser dropped localStorage but IndexedDB survived (or the other way round), recover the newer copy
+  function syncFromIdb() {
+    idb.get('state').then((raw) => {
+      if (!raw) { if (state.txns.length || state.accounts.length) idb.set('state', JSON.stringify(state)).catch(() => {}); return; }
+      const s = normalize(JSON.parse(raw));
+      if (s.rev > state.rev) { state = s; try { localStorage.setItem(KEY, raw); } catch (e) { /* ignore */ } view.period = null; render(); toast('Restored your data from this device'); }
+      else if (s.rev < state.rev) idb.set('state', JSON.stringify(state)).catch(() => {});
+    }).catch(() => {});
+  }
 
   /* ---------- category icons (line icons, one accent colour each) ---------- */
   const PATHS = {
@@ -68,11 +129,36 @@
     return a.date && a.date === b.date && (a.time || '') === (b.time || '') && a.account === b.account && (a.party || '') === (b.party || '');
   }
 
+  /* ---------- bank accounts ---------- */
+  const UNKNOWN = 'Unknown account';
+  const acctKey = (bank, last4) => (last4 ? `${bank || 'Bank'} ••${last4}` : bank);
+  const last4Of = (label) => ((/••(\d{3,4})/.exec(label || '') || [])[1]) || null;
+  function matchAccount(d) { // map a parsed "HDFC ••1234" onto a saved account with the same trailing digits
+    const l = last4Of(d.accountLabel);
+    if (!l) return null;
+    return state.accounts.find((x) => x.last4 && (x.last4.endsWith(l) || l.endsWith(x.last4))) || null;
+  }
+  function defaultAccount() {
+    const keys = state.accounts.map((x) => x.key);
+    if (state.lastAccount && (keys.includes(state.lastAccount) || state.txns.some((t) => t.account === state.lastAccount))) return state.lastAccount;
+    return keys.length === 1 ? keys[0] : UNKNOWN;
+  }
+  function applyAccount(d) {
+    const m = matchAccount(d);
+    if (m) d.accountLabel = m.key;
+    else if (d.accountLabel === UNKNOWN || !d.accountLabel) d.accountLabel = defaultAccount();
+    d.account = d.accountLabel;
+  }
+  function allAccountKeys(extra) {
+    return [...new Set([...state.accounts.map((x) => x.key), ...state.txns.map((t) => t.account), extra].filter(Boolean))];
+  }
+
   /* ---------- paste / preview ---------- */
   function readBlob() {
     const text = $('blob').value.trim();
     if (!text) { toast('Paste a message first'); return; }
     const parsed = parseMany(text).map((p) => ({ ...p, keep: true, dateGuessed: !p.date }));
+    parsed.forEach(applyAccount);
     const seen = [];
     parsed.forEach((d) => {
       d.dup = state.txns.some((t) => sameTxn(t, d)) || seen.some((s) => sameTxn(s, d));
@@ -84,17 +170,15 @@
   }
 
   function addBlank() {
-    drafts.push({ type: 'debit', amount: null, party: '', vpa: null, date: today(), time: '', account: 'unknown', accountLabel: 'Unknown account', balance: null, ref: null, category: 'Other', note: '', raw: '', complete: false, keep: true, manual: true });
+    drafts.push({ type: 'debit', amount: null, party: '', vpa: null, date: today(), time: '', account: defaultAccount(), accountLabel: defaultAccount(), balance: null, ref: null, category: 'Other', note: '', raw: '', complete: false, keep: true, manual: true });
     renderPreview();
   }
 
   function renderPreview() {
     const box = $('preview');
-    if (!drafts.length) { box.innerHTML = ''; return; }
-    const known = [...new Set(state.txns.map((t) => t.accountLabel))];
+    if (!drafts.length) { box.innerHTML = ''; persistDraft(); return; }
     const ready = drafts.filter((d) => d.keep).length;
-    box.innerHTML = `<div class="pv-head"><span>I found ${drafts.length} message${drafts.length > 1 ? 's' : ''} — review, add a note if you like</span>
-      <span><button class="btn ghost" data-act="cancel">Clear</button> <button class="btn primary" data-act="commit">Save ${ready}</button></span></div>` +
+    box.innerHTML = `<div class="pv-head"><span>${drafts.length} message${drafts.length > 1 ? 's' : ''} found — review, add a note if you like</span></div>` +
       drafts.map((d, i) => {
         const cats = d.type === 'credit' ? CREDIT_CATS : DEBIT_CATS;
         const tags = [
@@ -112,14 +196,15 @@
             <label>Amount ₹<input data-f="amount" type="number" inputmode="decimal" min="0" step="0.01" value="${d.amount ?? ''}"></label>
             <label>${d.type === 'credit' ? 'From' : 'To'}<input data-f="party" value="${esc(d.party)}" placeholder="Name or UPI id"></label>
             <label>Date<input data-f="date" type="date" value="${esc(d.date || today())}"></label>
-            <label>Account<input data-f="accountLabel" list="acctList" value="${esc(d.accountLabel)}"></label>
+            <label>Account<select data-f="accountLabel">${allAccountKeys(d.accountLabel).map((k) => `<option value="${esc(k)}" ${k === d.accountLabel ? 'selected' : ''}>${esc(k)}</option>`).join('')}<option value="__new">+ Add bank account…</option></select></label>
             <label>Category<select data-f="category">${cats.map((c) => `<option ${c === d.category ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
             <label>Balance after (optional)<input data-f="balance" type="number" inputmode="decimal" step="0.01" value="${d.balance ?? ''}"></label>
             <label class="full">Note<input data-f="note" value="${esc(d.note)}" placeholder="e.g. birthday gift, split with Rahul…"></label>
           </div>
           ${d.raw ? `<details class="raw"><summary>Original message</summary><p>${esc(d.raw)}</p></details>` : ''}
         </div>`;
-      }).join('') + `<datalist id="acctList">${known.map((k) => `<option value="${esc(k)}">`).join('')}</datalist>`;
+      }).join('') + `<div class="pv-bar"><button class="btn ghost" data-act="cancel">Clear</button><button class="btn primary" data-act="commit">Save ${ready} transaction${ready === 1 ? '' : 's'}</button></div>`;
+    persistDraft();
   }
 
   function commit() {
@@ -127,7 +212,7 @@
     drafts.forEach((d) => {
       if (!d.keep) return;
       if (!(d.amount > 0)) { skipped++; return; }
-      const label = (d.accountLabel || '').trim() || 'Unknown account';
+      const label = (d.accountLabel || '').trim() || UNKNOWN;
       state.txns.push({
         id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
         seq: ++state.seq, type: d.type, amount: Number(d.amount), party: (d.party || '').trim(), vpa: d.vpa || null,
@@ -139,23 +224,39 @@
     });
     if (!saved && skipped) { toast('Add an amount first'); renderPreview(); return; }
     if (!saved) { toast('Nothing ticked to save'); return; }
+    const lastSaved = drafts.filter((d) => d.keep && d.amount > 0).pop();
+    if (lastSaved && lastSaved.accountLabel !== UNKNOWN) state.lastAccount = lastSaved.accountLabel;
     save();
     drafts = []; $('blob').value = ''; renderPreview();
     view.period = null; // jump to the newest month
     render();
-    toast(`Saved ${saved} transaction${saved > 1 ? 's' : ''}${skipped ? ` (${skipped} skipped – no amount)` : ''}`);
+    toast(`Saved ${saved} transaction${saved > 1 ? 's' : ''}${skipped ? ` (${skipped} skipped – no amount)` : ''}. Paste the next one anytime.`);
+    $('pasteCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   /* ---------- derived data ---------- */
+  function balanceOf(key, acct) {
+    const mine = state.txns.filter((t) => t.account === key);
+    let base = null;
+    mine.forEach((t) => { if (t.balance != null && (!base || sortKey(t) > sortKey(base))) base = t; });
+    const op = acct && acct.opening;
+    const opKey = op ? `${op.date} 23:59 ${String(op.seq).padStart(8, '0')}` : '';
+    if (op && (!base || opKey >= sortKey(base))) { // a balance typed in by hand is the newest anchor
+      const adj = mine.filter((t) => t.balance == null && t.date >= op.date && t.seq > op.seq).reduce((s, t) => s + (t.type === 'credit' ? t.amount : -t.amount), 0);
+      return { bal: op.amount + adj, asOf: op.date, source: 'entered' };
+    }
+    if (base) {
+      const bk = sortKey(base);
+      const adj = mine.filter((t) => t.balance == null && sortKey(t) > bk).reduce((s, t) => s + (t.type === 'credit' ? t.amount : -t.amount), 0);
+      return { bal: base.balance + adj, asOf: base.date, source: 'sms' };
+    }
+    return { bal: null, asOf: null, source: null };
+  }
   function accounts() {
-    const map = new Map();
-    state.txns.forEach((t) => {
-      const a = map.get(t.account) || { key: t.account, label: t.accountLabel, count: 0, last: null };
-      a.count++;
-      if (t.balance != null && (!a.last || sortKey(t) > sortKey(a.last))) a.last = t;
-      map.set(t.account, a);
-    });
-    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
+    return allAccountKeys().map((key) => {
+      const acct = state.accounts.find((x) => x.key === key) || null;
+      return { key, label: key, acct, count: state.txns.filter((t) => t.account === key).length, ...balanceOf(key, acct) };
+    }).sort((x, y) => x.label.localeCompare(y.label));
   }
   const months = () => [...new Set(state.txns.map((t) => monthOf(t.date)))].sort().reverse();
   function scoped() {
@@ -174,21 +275,21 @@
   }
 
   function renderHero(accts) {
-    const known = accts.filter((a) => a.last);
+    const known = accts.filter((x) => x.bal != null);
     const el = $('hero');
-    if (!state.txns.length) {
-      el.innerHTML = '<small>Your balance</small><div class="big">₹0</div><div class="sub">Add your first bank message below to get started.</div>';
+    if (!state.txns.length && !known.length) {
+      el.innerHTML = '<small>Total balance</small><div class="big">₹0</div><div class="sub">Add a bank account or paste your first bank message to get started.</div>';
       return;
     }
     if (known.length) {
-      const total = known.reduce((s, a) => s + a.last.balance, 0);
-      const latest = known.map((a) => a.last).sort((a, b) => (sortKey(a) < sortKey(b) ? 1 : -1))[0];
-      el.innerHTML = `<small>Money in the bank</small><div class="big">${money(total)}</div>
-        <div class="sub">across ${known.length} account${known.length > 1 ? 's' : ''} · latest message ${esc(dayName(latest.date).toLowerCase())}</div>`;
+      const total = known.reduce((s, x) => s + x.bal, 0);
+      const latest = known.map((x) => x.asOf).sort().pop();
+      el.innerHTML = `<small>Total balance</small><div class="big">${total < 0 ? '−' : ''}${money(Math.abs(total))}</div>
+        <div class="sub">across ${known.length} account${known.length > 1 ? 's' : ''} · updated ${esc(dayName(latest).toLowerCase())}</div>`;
     } else {
       const net = state.txns.reduce((s, t) => s + (t.type === 'credit' ? t.amount : -t.amount), 0);
       el.innerHTML = `<small>Net so far</small><div class="big">${net < 0 ? '−' : ''}${money(Math.abs(net))}</div>
-        <div class="sub">None of your messages had a balance. Paste ones that say “Avl Bal” and I’ll show your real balance.</div>`;
+        <div class="sub">No balance yet. Add your bank account with its current balance, or paste messages that say “Avl Bal”.</div>`;
     }
   }
 
@@ -201,10 +302,11 @@
   }
 
   function renderAccounts(accts) {
-    $('accountsCard').hidden = !accts.length;
-    $('accounts').innerHTML = accts.map((a) => `<div class="acct${view.account === a.key ? ' on' : ''}" data-acct="${esc(a.key)}" role="button" tabindex="0" title="Show only this account">
-      <b>${esc(a.label)}</b><div class="amt">${a.last ? money(a.last.balance) : '—'}</div>
-      <small>${a.last ? 'as of ' + esc(dayName(a.last.date)) : 'no balance in messages'} · ${a.count} txn${a.count > 1 ? 's' : ''}</small></div>`).join('');
+    $('accounts').innerHTML = accts.length ? accts.map((x) => `<div class="acct${view.account === x.key ? ' on' : ''}" data-acct="${esc(x.key)}" role="button" tabindex="0" title="Show only this account">
+      <b>${esc(x.label)}</b><div class="amt">${x.bal != null ? (x.bal < 0 ? '−' : '') + money(Math.abs(x.bal)) : '—'}</div>
+      <small>${x.bal != null ? (x.source === 'entered' ? 'balance you entered' : 'from your messages') + ' · ' + esc(dayName(x.asOf)) : 'no balance yet'} · ${x.count} txn${x.count === 1 ? '' : 's'}</small>
+      ${x.acct ? `<button class="mini" data-edit="${esc(x.key)}">Edit</button>` : `<button class="mini" data-save-acct="${esc(x.key)}">Save as account</button>`}</div>`).join('')
+      : '<p class="hint">No accounts yet. Add your bank account so balances can be tracked.</p>';
   }
 
   function renderCats(sc) {
@@ -265,6 +367,43 @@
 
   /* ---------- events ---------- */
   $('btnRead').onclick = readBlob;
+  $('blob').addEventListener('input', persistDraft);
+  $('btnAddAcct').onclick = () => openAcct(null, null);
+  let acctEditing = null, acctForDraft = null;
+  function openAcct(acct, draftIdx, prefillKey) {
+    acctEditing = acct; acctForDraft = draftIdx;
+    $('acctTitle').textContent = acct ? 'Edit bank account' : 'Add bank account';
+    $('aBank').value = acct ? acct.bank : (prefillKey ? prefillKey.replace(/\s*••.*$/, '') : '');
+    $('aLast').value = acct ? acct.last4 || '' : (prefillKey ? last4Of(prefillKey) || '' : '');
+    $('aBal').value = acct && acct.opening ? acct.opening.amount : '';
+    $('aDelete').hidden = !acct; $('aErr').textContent = '';
+    $('dlgAcct').showModal();
+  }
+  $('aCancel').onclick = () => $('dlgAcct').close();
+  $('aDelete').onclick = () => {
+    if (!acctEditing || !confirm(`Remove ${acctEditing.key} from your accounts? Its transactions stay in your list.`)) return;
+    state.accounts = state.accounts.filter((x) => x.id !== acctEditing.id); save(); $('dlgAcct').close(); render(); toast('Account removed');
+  };
+  $('aSave').onclick = () => {
+    const bank = $('aBank').value.trim(), last4 = $('aLast').value.replace(/\D/g, '').slice(-4), balRaw = $('aBal').value;
+    if (!bank) { $('aErr').textContent = 'Enter the bank name.'; return; }
+    const key = acctKey(bank, last4);
+    if (state.accounts.some((x) => x.key === key && (!acctEditing || x.id !== acctEditing.id))) { $('aErr').textContent = 'You already added this account.'; return; }
+    const opening = balRaw === '' ? (acctEditing ? acctEditing.opening : null) : { amount: Number(balRaw), date: today(), seq: ++state.seq };
+    const wasEditing = !!acctEditing;
+    if (acctEditing) {
+      const old = acctEditing.key;
+      Object.assign(acctEditing, { bank, last4: last4 || null, key, opening });
+      if (old !== key) { state.txns.forEach((t) => { if (t.account === old) { t.account = key; t.accountLabel = key; } }); if (state.lastAccount === old) state.lastAccount = key; if (view.account === old) view.account = key; }
+    } else {
+      state.accounts.push({ id: 'a' + Date.now().toString(36), bank, last4: last4 || null, key, opening });
+      state.lastAccount = key;
+      // messages already saved under this account's trailing digits now belong to it
+      if (last4) state.txns.forEach((t) => { const l = last4Of(t.account); if (l && t.account !== key && (last4.endsWith(l) || l.endsWith(last4))) { t.account = key; t.accountLabel = key; } });
+    }
+    if (acctForDraft != null && drafts[acctForDraft]) { drafts[acctForDraft].accountLabel = key; drafts[acctForDraft].account = key; }
+    save(); $('dlgAcct').close(); render(); renderPreview(); toast(wasEditing ? 'Account updated' : 'Account added');
+  };
   $('btnManual').onclick = addBlank;
   $('btnDemo').onclick = () => {
     $('blob').value = 'Sent Rs.250.00 from HDFC Bank A/C *1234 to VPA swiggy@icici SWIGGY on 07/10/26. UPI Ref No 628712345678. Avl Bal Rs 12,345.67\n\n' +
@@ -290,7 +429,8 @@
     const d = drafts[e.target.closest('.pv').dataset.i];
     if (f === 'keep') d.keep = e.target.checked;
     else if (f === 'amount' || f === 'balance') d[f] = e.target.value === '' ? null : Number(e.target.value);
-    else { d[f] = e.target.value; if (f === 'accountLabel') d.account = e.target.value.trim() || 'Unknown account'; if (f === 'date') d.dateGuessed = false; }
+    else if (f === 'accountLabel' && e.target.value === '__new') { openAcct(null, Number(e.target.closest('.pv').dataset.i)); return renderPreview(); }
+    else { d[f] = e.target.value; if (f === 'accountLabel') d.account = e.target.value; if (f === 'date') d.dateGuessed = false; }
     d.dup = state.txns.some((t) => sameTxn(t, { ...d, account: d.account }));
     renderPreview();
   });
@@ -299,7 +439,13 @@
   ['fPeriod', 'fAccount', 'fType'].forEach((id) => $(id).addEventListener('change', refilter));
   $('fSearch').addEventListener('input', (e) => { view.q = e.target.value; renderList(scoped()); });
   const pickAccount = (el) => { const a = el.closest('[data-acct]'); if (a) { view.account = view.account === a.dataset.acct ? 'all' : a.dataset.acct; render(); } };
-  $('accounts').addEventListener('click', (e) => pickAccount(e.target));
+  $('accounts').addEventListener('click', (e) => {
+    const ed = e.target.closest('[data-edit]');
+    if (ed) return openAcct(state.accounts.find((x) => x.key === ed.dataset.edit), null);
+    const sv = e.target.closest('[data-save-acct]');
+    if (sv) return openAcct(null, null, sv.dataset.saveAcct);
+    pickAccount(e.target);
+  });
   $('accounts').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickAccount(e.target); } });
 
   $('list').addEventListener('click', (e) => {
@@ -357,14 +503,17 @@
       const s = JSON.parse(await f.text());
       if (!Array.isArray(s.txns)) throw new Error('bad file');
       if (state.txns.length && !confirm(`Replace your ${state.txns.length} saved transactions with ${s.txns.length} from this backup?`)) return;
-      state = { txns: s.txns, seq: s.seq || s.txns.length }; save(); view.period = null; render();
+      state = normalize({ txns: s.txns, accounts: s.accounts, seq: s.seq, lastAccount: s.lastAccount, rev: state.rev }); save(); view.period = null; render();
       $('dlgBackup').close(); toast('Backup restored');
     } catch (err) { toast('That doesn’t look like a Piggy backup'); }
   };
   $('btnWipe').onclick = () => {
     if (!confirm('Erase ALL saved transactions from this browser? This cannot be undone.')) return;
-    state = { txns: [], seq: 0 }; save(); render(); toast('All data erased');
+    state = normalize({ txns: [], rev: state.rev }); save(); render(); toast('All data erased');
   };
 
   render();
+  restoreDraft();
+  syncFromIdb();
+  showStoreNote();
 })();

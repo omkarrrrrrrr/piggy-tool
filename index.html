@@ -26,7 +26,7 @@
   <section class="hero" id="hero"></section>
   <section class="stats" id="stats"></section>
 
-  <section class="card paste">
+  <section class="card paste" id="pasteCard">
     <h2>Add transactions</h2>
     <p class="hint">Paste the SMS from <b>any</b> bank or UPI app. You can paste several at once, separated by a blank line.</p>
     <textarea id="blob" rows="4" placeholder="e.g. Sent Rs.250.00 from HDFC Bank A/C *1234 to VPA swiggy@icici on 07/10/26. UPI Ref No 628712345678. Avl Bal Rs 12,345.67"></textarea>
@@ -38,8 +38,8 @@
     <div id="preview"></div>
   </section>
 
-  <section class="card" id="accountsCard" hidden>
-    <h2>Accounts</h2>
+  <section class="card" id="accountsCard">
+    <div class="list-head"><h2>Accounts</h2><button class="btn ghost sm" id="btnAddAcct">+ Add bank account</button></div>
     <div class="accounts" id="accounts"></div>
   </section>
 
@@ -63,7 +63,7 @@
     <div id="list"></div>
   </section>
 
-  <footer>Your data stays in this browser and is never uploaded. <button class="link" id="btnWipe">Erase all</button></footer>
+  <footer><span id="storeNote">Saved on this device.</span><br>Your data is never uploaded. <button class="link" id="btnWipe">Erase all</button></footer>
 </main>
 
 <dialog id="dlgBackup">
@@ -74,6 +74,19 @@
     <label class="btn ghost file">Restore from file<input type="file" id="fileJson" accept=".json,application/json" hidden></label>
   </div>
   <div class="row end"><button class="btn ghost" id="btnCloseBackup">Close</button></div>
+</dialog>
+
+<dialog id="dlgAcct">
+  <h3 id="acctTitle">Add bank account</h3>
+  <p class="hint">Add the accounts you pay from. Messages mentioning the same last digits are matched to it automatically.</p>
+  <div class="grid">
+    <label class="full">Bank name<input id="aBank" list="bankList" placeholder="e.g. HDFC" autocomplete="off"></label>
+    <label>Last 4 digits <small>(optional)</small><input id="aLast" inputmode="numeric" maxlength="4" placeholder="1234" autocomplete="off"></label>
+    <label>Current balance ₹ <small>(optional)</small><input id="aBal" type="number" inputmode="decimal" step="0.01" placeholder="12000"></label>
+  </div>
+  <datalist id="bankList"><option>HDFC</option><option>ICICI</option><option>SBI</option><option>Axis</option><option>Kotak</option><option>PNB</option><option>BoB</option><option>Canara</option><option>Union</option><option>IDFC</option><option>Yes Bank</option><option>IndusInd</option><option>Federal</option><option>BoI</option><option>IDBI</option><option>AU</option></datalist>
+  <p class="err" id="aErr" role="alert"></p>
+  <div class="row end"><button class="btn ghost danger" id="aDelete" hidden>Remove</button><button class="btn ghost" id="aCancel">Cancel</button><button class="btn primary" id="aSave">Save account</button></div>
 </dialog>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
