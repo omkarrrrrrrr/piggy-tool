@@ -529,8 +529,8 @@
   };
   $('btnInstallClose').onclick = () => $('dlgInstall').close();
   $('btnInstallHide').onclick = () => { $('installBar').hidden = true; try { localStorage.setItem('piggy.installHidden', '1'); } catch (e) { /* ignore */ } };
-  // iPhones never fire beforeinstallprompt, so offer the manual steps there; other browsers show the bar once they say they can install
-  if (isIOS) showInstallBar();
+  // Always offer it: the native prompt only fires in some browsers (and not at all on iPhone), so the button falls back to manual steps
+  showInstallBar();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {}));
   }
