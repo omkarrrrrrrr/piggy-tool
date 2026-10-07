@@ -86,7 +86,7 @@
         return `<div class="pv ${d.dup ? 'dup' : ''} ${d.keep && !(d.amount > 0) ? 'bad' : ''}" data-i="${i}">
           <div class="pv-top"><input type="checkbox" data-f="keep" ${d.keep ? 'checked' : ''} aria-label="Save this one">
             <div class="seg" role="group" aria-label="Type"><button data-type="debit" class="${d.type === 'debit' ? 'on debit' : ''}">Paid</button><button data-type="credit" class="${d.type === 'credit' ? 'on credit' : ''}">Received</button></div>
-            <span>${tags}</span></div>
+            <span class="tags">${tags}</span></div>
           <div class="grid">
             <label>Amount ₹<input data-f="amount" type="number" inputmode="decimal" min="0" step="0.01" value="${d.amount ?? ''}"></label>
             <label>${d.type === 'credit' ? 'From' : 'To'}<input data-f="party" value="${esc(d.party)}" placeholder="Name or UPI id"></label>

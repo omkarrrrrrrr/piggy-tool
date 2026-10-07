@@ -138,8 +138,37 @@ label.file { display: inline-block; cursor: pointer; }
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 90px); background: var(--ink); color: var(--bg); padding: 11px 20px; border-radius: 99px; font-weight: 800; z-index: 20; transition: transform .3s; max-width: calc(100% - 32px); text-align: center; }
 .toast.show { transform: translate(-50%, 0); }
 
-@media (max-width: 480px) {
+.pv-top { flex-wrap: wrap; }
+.pv-top .tags { flex-basis: 100%; display: flex; gap: 6px; flex-wrap: wrap; }
+.tag { white-space: nowrap; }
+.wrap { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); padding-bottom: calc(48px + env(safe-area-inset-bottom)); }
+.toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
+
+/* phones: bigger tap targets, 16px fields (stops iOS zooming on focus), single-column forms */
+@media (max-width: 560px) {
+  .wrap { padding-top: 12px; }
+  .brand h1 { font-size: 24px; } .pig { font-size: 34px; }
+  .brand p { font-size: 12px; }
+  .top-actions { flex-wrap: nowrap; } .chip { padding: 9px 12px; white-space: nowrap; min-height: 40px; }
+  .hero { padding: 18px; border-radius: 24px; }
   .stats { gap: 8px; } .stat { padding: 10px; } .stat b { font-size: 15px; }
-  .top-actions .chip { padding: 7px 11px; }
+  .card { padding: 14px; border-radius: 20px; }
+  .btn { min-height: 46px; padding: 12px 16px; }
+  .row .btn { flex: 1 1 auto; }
+  input, select, textarea { font-size: 16px; }
+  .filters { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .filters select { width: 100%; font-size: 16px; min-height: 44px; }
+  #fPeriod { grid-column: 1 / -1; }
+  .tx-actions button { min-height: 34px; padding: 6px 12px; font-size: 13px; }
+  .tx { gap: 10px; grid-template-columns: 40px 1fr auto; } .ico { width: 40px; height: 40px; font-size: 20px; }
+  .pv-head > span:last-child { display: flex; gap: 8px; width: 100%; } .pv-head .btn { flex: 1; }
 }
+@media (max-width: 420px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .top-actions .chip { padding: 9px 10px; }
+  .hero .big { font-size: 34px; }
+  .accounts { grid-template-columns: minmax(0, 1fr); }
+  .stat small { font-size: 11px; }
+}
+@media (max-width: 340px) { .brand p { display: none; } .stat b { font-size: 14px; } .pig { font-size: 28px; } .brand h1 { font-size: 22px; } .brand { gap: 6px; } .top { gap: 6px; } .chip { font-size: 13px; padding: 9px 8px; } .top-actions { gap: 5px; } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
