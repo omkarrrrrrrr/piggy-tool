@@ -1,6 +1,6 @@
 /* Piggy – paste bank SMS, get an organised UPI diary. All data lives in localStorage. */
 (function () {
-  const { parseMany, CAT_ICON, DEBIT_CATS, CREDIT_CATS } = Parser;
+  const { parseMany, DEBIT_CATS, CREDIT_CATS } = Parser;
   const KEY = 'piggy.v1';
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -20,6 +20,27 @@
     try { localStorage.setItem(KEY, JSON.stringify(state)); }
     catch (e) { toast('Could not save – is browser storage blocked?'); }
   }
+
+
+  /* ---------- category icons (line icons, one accent colour each) ---------- */
+  const PATHS = {
+    Food: 'M7 3v8M4 3v5a3 3 0 0 0 6 0V3M7 11v10M17 3c-2 2-3 5-3 8h3v10',
+    Groceries: 'M3 4h2l2.4 11h10.2L20 8H6M9 20h.01M17 20h.01',
+    Travel: 'M5 16l1.5-5.5A2 2 0 0 1 8.4 9h7.2a2 2 0 0 1 1.9 1.5L19 16M4 16h16v3h-2v-1H6v1H4zM7.5 13h.01M16.5 13h.01',
+    Shopping: 'M6 8h12l1 12H5L6 8zM9 8a3 3 0 0 1 6 0',
+    Bills: 'M13 2L4 14h7l-1 8 9-12h-7l1-8z',
+    Fun: 'M5 4h14v16H5zM10 9l5 3-5 3z',
+    Health: 'M12 8v8M8 12h8M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z',
+    Learning: 'M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2V5zM4 19a2 2 0 0 1 2-2h13',
+    Rent: 'M3 11l9-8 9 8M5 10v10h14V10M10 20v-6h4v6',
+    Other: 'M5 12h.01M12 12h.01M19 12h.01',
+    'Money in': 'M17 7L7 17M7 8v9h9',
+    Salary: 'M4 8h16v11H4zM9 8V5h6v3M4 13h16',
+    Search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
+  };
+  const COLORS = { Food: '#ea580c', Groceries: '#16a34a', Travel: '#2563eb', Shopping: '#db2777', Bills: '#ca8a04', Fun: '#7c3aed', Health: '#dc2626', Learning: '#0891b2', Rent: '#64748b', Other: '#64748b', 'Money in': '#059669', Salary: '#059669' };
+  const icon = (c) => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="${c === 'Other' ? 3 : 1.8}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${PATHS[c] || PATHS.Other}"/></svg>`;
+  const catStyle = (c) => `--c:${COLORS[c] || COLORS.Other}`;
 
   /* ---------- helpers ---------- */
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -50,7 +71,7 @@
   /* ---------- paste / preview ---------- */
   function readBlob() {
     const text = $('blob').value.trim();
-    if (!text) { toast('Paste a message first 💌'); return; }
+    if (!text) { toast('Paste a message first'); return; }
     const parsed = parseMany(text).map((p) => ({ ...p, keep: true, dateGuessed: !p.date }));
     const seen = [];
     parsed.forEach((d) => {
@@ -72,12 +93,12 @@
     if (!drafts.length) { box.innerHTML = ''; return; }
     const known = [...new Set(state.txns.map((t) => t.accountLabel))];
     const ready = drafts.filter((d) => d.keep).length;
-    box.innerHTML = `<div class="pv-head"><span>I found ${drafts.length} message${drafts.length > 1 ? 's' : ''} 🔍 — check and add a note if you like</span>
-      <span><button class="btn ghost" data-act="cancel">Clear</button> <button class="btn mint" data-act="commit">Save ${ready} 💖</button></span></div>` +
+    box.innerHTML = `<div class="pv-head"><span>I found ${drafts.length} message${drafts.length > 1 ? 's' : ''} — review, add a note if you like</span>
+      <span><button class="btn ghost" data-act="cancel">Clear</button> <button class="btn primary" data-act="commit">Save ${ready}</button></span></div>` +
       drafts.map((d, i) => {
         const cats = d.type === 'credit' ? CREDIT_CATS : DEBIT_CATS;
         const tags = [
-          d.dup ? '<span class="tag warn">Already saved 🔁</span>' : '',
+          d.dup ? '<span class="tag warn">Already saved</span>' : '',
           d.unreadable ? '<span class="tag err">Couldn’t read this one – fill it in</span>' : '',
           !d.unreadable && !d.manual && d.amount == null ? '<span class="tag err">No amount found</span>' : '',
           d.dateGuessed && !d.unreadable && !d.manual ? '<span class="tag warn">No date – using today</span>' : '',
@@ -94,7 +115,7 @@
             <label>Account<input data-f="accountLabel" list="acctList" value="${esc(d.accountLabel)}"></label>
             <label>Category<select data-f="category">${cats.map((c) => `<option ${c === d.category ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
             <label>Balance after (optional)<input data-f="balance" type="number" inputmode="decimal" step="0.01" value="${d.balance ?? ''}"></label>
-            <label class="full">Note 📝<input data-f="note" value="${esc(d.note)}" placeholder="e.g. birthday gift, split with Rahul…"></label>
+            <label class="full">Note<input data-f="note" value="${esc(d.note)}" placeholder="e.g. birthday gift, split with Rahul…"></label>
           </div>
           ${d.raw ? `<details class="raw"><summary>Original message</summary><p>${esc(d.raw)}</p></details>` : ''}
         </div>`;
@@ -116,13 +137,13 @@
       });
       saved++;
     });
-    if (!saved && skipped) { toast('Add an amount first 🙈'); renderPreview(); return; }
+    if (!saved && skipped) { toast('Add an amount first'); renderPreview(); return; }
     if (!saved) { toast('Nothing ticked to save'); return; }
     save();
     drafts = []; $('blob').value = ''; renderPreview();
     view.period = null; // jump to the newest month
     render();
-    toast(`Saved ${saved} transaction${saved > 1 ? 's' : ''} 🎉${skipped ? ` (${skipped} skipped – no amount)` : ''}`);
+    toast(`Saved ${saved} transaction${saved > 1 ? 's' : ''}${skipped ? ` (${skipped} skipped – no amount)` : ''}`);
   }
 
   /* ---------- derived data ---------- */
@@ -156,7 +177,7 @@
     const known = accts.filter((a) => a.last);
     const el = $('hero');
     if (!state.txns.length) {
-      el.innerHTML = '<small>Your balance</small><div class="big">₹0</div><div class="sub">Paste your first bank message below and I’ll start counting 🐷</div>';
+      el.innerHTML = '<small>Your balance</small><div class="big">₹0</div><div class="sub">Add your first bank message below to get started.</div>';
       return;
     }
     if (known.length) {
@@ -181,7 +202,7 @@
 
   function renderAccounts(accts) {
     $('accountsCard').hidden = !accts.length;
-    $('accounts').innerHTML = accts.map((a) => `<div class="acct" data-acct="${esc(a.key)}" role="button" tabindex="0" title="Show only this account">
+    $('accounts').innerHTML = accts.map((a) => `<div class="acct${view.account === a.key ? ' on' : ''}" data-acct="${esc(a.key)}" role="button" tabindex="0" title="Show only this account">
       <b>${esc(a.label)}</b><div class="amt">${a.last ? money(a.last.balance) : '—'}</div>
       <small>${a.last ? 'as of ' + esc(dayName(a.last.date)) : 'no balance in messages'} · ${a.count} txn${a.count > 1 ? 's' : ''}</small></div>`).join('');
   }
@@ -192,7 +213,7 @@
     const rows = Object.entries(spent).sort((a, b) => b[1] - a[1]);
     $('catCard').hidden = !rows.length;
     const total = rows.reduce((s, r) => s + r[1], 0) || 1;
-    $('cats').innerHTML = rows.map(([c, v]) => `<div class="cat"><span>${CAT_ICON[c] || '✨'}</span>
+    $('cats').innerHTML = rows.map(([c, v]) => `<div class="cat"><span class="ico sm" style="${catStyle(c)}">${icon(c)}</span>
       <div><div class="nm">${esc(c)} <small style="color:var(--muted)">${Math.round((v / total) * 100)}%</small></div><div class="bar"><i style="width:${(v / total) * 100}%"></i></div></div>
       <span class="v">${money(v)}</span></div>`).join('');
   }
@@ -213,8 +234,8 @@
     const el = $('list');
     if (!rows.length) {
       el.innerHTML = state.txns.length
-        ? '<div class="empty"><span class="em">🔎</span>Nothing matches these filters</div>'
-        : '<div class="empty"><span class="em">🌱</span>No transactions yet.<br>Paste a bank message above to plant the first one!</div>';
+        ? `<div class="empty"><span class="em">${icon('Search')}</span>Nothing matches these filters</div>`
+        : `<div class="empty"><span class="em">${icon('Other')}</span>No transactions yet.<br>Paste a bank message above to add your first one.</div>`;
       return;
     }
     let html = '', day = null, i = 0;
@@ -232,12 +253,12 @@
   function txHtml(t) {
     const editing = view.editing === t.id;
     return `<div class="tx ${t.type}" data-id="${t.id}">
-      <div class="ico">${CAT_ICON[t.category] || '✨'}</div>
+      <div class="ico" style="${catStyle(t.type === 'credit' && t.category === 'Other' ? 'Money in' : t.category)}">${icon(t.category)}</div>
       <div style="min-width:0"><div class="who">${esc(t.party || (t.type === 'credit' ? 'Money received' : 'Payment'))}</div>
         <div class="meta">${esc(t.category)} · ${esc(t.accountLabel)}${t.time ? ' · ' + esc(t.time) : ''}</div></div>
       <div class="amt">${signed(t)}</div>
       ${editing ? `<div style="grid-column:2/-1"><input data-note value="${esc(t.note)}" placeholder="Write a note, press Enter to save" maxlength="200"></div>`
-        : t.note ? `<div class="note">📝 ${esc(t.note)}</div>` : ''}
+        : t.note ? `<div class="note">${esc(t.note)}</div>` : ''}
       <div class="tx-actions"><button data-act="note">${t.note ? 'Edit note' : '+ Note'}</button>
         <button data-act="cat">Category</button><button data-act="del">Delete</button></div></div>`;
   }
@@ -287,7 +308,7 @@
     if (btn.dataset.act === 'note') { view.editing = view.editing === t.id ? null : t.id; renderList(scoped()); }
     if (btn.dataset.act === 'del') {
       if (!confirm(`Delete ${signed(t)} ${t.party || ''}?`)) return;
-      state.txns = state.txns.filter((x) => x.id !== t.id); save(); render(); toast('Deleted 🗑️');
+      state.txns = state.txns.filter((x) => x.id !== t.id); save(); render(); toast('Deleted');
     }
     if (btn.dataset.act === 'cat') {
       const cats = t.type === 'credit' ? CREDIT_CATS : DEBIT_CATS;
@@ -337,12 +358,12 @@
       if (!Array.isArray(s.txns)) throw new Error('bad file');
       if (state.txns.length && !confirm(`Replace your ${state.txns.length} saved transactions with ${s.txns.length} from this backup?`)) return;
       state = { txns: s.txns, seq: s.seq || s.txns.length }; save(); view.period = null; render();
-      $('dlgBackup').close(); toast('Backup restored 🎉');
+      $('dlgBackup').close(); toast('Backup restored');
     } catch (err) { toast('That doesn’t look like a Piggy backup'); }
   };
   $('btnWipe').onclick = () => {
     if (!confirm('Erase ALL saved transactions from this browser? This cannot be undone.')) return;
-    state = { txns: [], seq: 0 }; save(); render(); toast('All clean ✨');
+    state = { txns: [], seq: 0 }; save(); render(); toast('All data erased');
   };
 
   render();

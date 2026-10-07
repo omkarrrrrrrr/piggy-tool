@@ -5,21 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Piggy – UPI Money Diary</title>
 <meta name="description" content="Paste your bank SMS and Piggy sorts every UPI payment, tracks your balance and lets you add notes. Everything stays on your device.">
-<meta name="theme-color" content="#ffd6e7">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%90%B7%3C/text%3E%3C/svg%3E">
+<meta name="theme-color" content="#f6f7f9">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%234f46e5'/%3E%3Ctext x='50' y='72' font-size='64' font-family='Arial' font-weight='700' text-anchor='middle' fill='white'%3E%E2%82%B9%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="blobs" aria-hidden="true"><i></i><i></i><i></i></div>
 <main class="wrap">
   <header class="top">
-    <div class="brand"><span class="pig">🐷</span><div><h1>Piggy</h1><p>your tiny UPI money diary</p></div></div>
+    <div class="brand"><span class="logo" aria-hidden="true">₹</span><div><h1>Piggy</h1><p>UPI expense tracker</p></div></div>
     <div class="top-actions">
-      <button class="chip" id="btnExport" title="Download CSV">⬇️ CSV</button>
-      <button class="chip" id="btnBackup" title="Backup / restore">💾 Backup</button>
+      <button class="chip" id="btnExport" title="Download CSV">Export CSV</button>
+      <button class="chip" id="btnBackup" title="Backup / restore">Backup</button>
     </div>
   </header>
 
@@ -27,11 +27,11 @@
   <section class="stats" id="stats"></section>
 
   <section class="card paste">
-    <h2>Paste a bank message 💌</h2>
-    <p class="hint">Copy the SMS from <b>any</b> bank or UPI app and drop it here. Paste many at once, separated by a blank line.</p>
+    <h2>Add transactions</h2>
+    <p class="hint">Paste the SMS from <b>any</b> bank or UPI app. You can paste several at once, separated by a blank line.</p>
     <textarea id="blob" rows="4" placeholder="e.g. Sent Rs.250.00 from HDFC Bank A/C *1234 to VPA swiggy@icici on 07/10/26. UPI Ref No 628712345678. Avl Bal Rs 12,345.67"></textarea>
     <div class="row">
-      <button class="btn primary" id="btnRead">Read it ✨</button>
+      <button class="btn primary" id="btnRead">Read message</button>
       <button class="btn ghost" id="btnManual">+ Add by hand</button>
       <button class="btn ghost" id="btnDemo">Try an example</button>
     </div>
@@ -39,23 +39,23 @@
   </section>
 
   <section class="card" id="accountsCard" hidden>
-    <h2>My accounts 🏦</h2>
+    <h2>Accounts</h2>
     <div class="accounts" id="accounts"></div>
   </section>
 
   <section class="card" id="catCard" hidden>
-    <h2>Where it went 🍰</h2>
+    <h2>Spending by category</h2>
     <div id="cats"></div>
   </section>
 
   <section class="card">
     <div class="list-head">
-      <h2>Transactions 🧾</h2>
+      <h2>Transactions</h2>
       <div class="filters">
         <select id="fPeriod" aria-label="Month"></select>
         <select id="fAccount" aria-label="Account"></select>
         <select id="fType" aria-label="Type">
-          <option value="all">All</option><option value="debit">Paid</option><option value="credit">Received</option>
+          <option value="all">All types</option><option value="debit">Paid</option><option value="credit">Received</option>
         </select>
       </div>
     </div>
@@ -63,11 +63,11 @@
     <div id="list"></div>
   </section>
 
-  <footer>🔒 Everything stays in this browser. Nothing is uploaded, ever. <button class="link" id="btnWipe">Erase all</button></footer>
+  <footer>Your data stays in this browser and is never uploaded. <button class="link" id="btnWipe">Erase all</button></footer>
 </main>
 
 <dialog id="dlgBackup">
-  <h3>Backup &amp; restore 💾</h3>
+  <h3>Backup &amp; restore</h3>
   <p class="hint">Your data lives only in this browser. Save a backup file before clearing browser data or switching phones.</p>
   <div class="row">
     <button class="btn primary" id="btnSaveJson">Download backup</button>
